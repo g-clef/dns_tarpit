@@ -1,2 +1,2 @@
-# DNS Tarpit Server Dependencies
-# No external dependencies required - uses only Python standard library
+dnspython>=2.3.0
+PyYAML>=6.0

@@ -1,0 +1,139 @@
+# DNS Tarpit Configuration File
+# This file controls all aspects of the DNS tarpit behavior
+
+# DNS Server Configuration
+dns:
+  # Zone this server is authoritative for (wildcards supported)
+  zone: "tarpit.example.com"
+  
+  # Interface to bind to (0.0.0.0 for all interfaces)
+  listen_address: "0.0.0.0"
+  
+  # Port to listen on (requires root for port 53)
+  listen_port: 53
+  
+  # SOA record details for the zone
+  soa:
+    primary_ns: "ns1.tarpit.example.com"
+    admin_email: "admin.tarpit.example.com"  # Note: @ replaced with .
+    serial: 2024010101
+    refresh: 3600
+    retry: 600
+    expire: 86400
+    minimum: 300
+
+# IP Address Pools for Responses
+# The tarpit will randomly select IPs from these ranges
+ip_responses:
+  # Mode: "pools" or "specific"
+  mode: "pools"
+  
+  # IP ranges (when mode is "pools")
+  # Using RFC 5737 TEST-NET ranges for documentation
+  pools:
+    - start: "192.0.2.1"      # TEST-NET-1
+      end: "192.0.2.254"
+    - start: "198.51.100.1"   # TEST-NET-2
+      end: "198.51.100.254"
+    - start: "203.0.113.1"    # TEST-NET-3
+      end: "203.0.113.254"
+  
+  # Alternatively, specify exact IPs (when mode is "specific")
+  # specific_ips:
+  #   - "192.0.2.1"
+  #   - "192.0.2.10"
+  #   - "192.0.2.20"
+  
+  # TTL for A records in responses
+  ttl: 300
+
+# Tarpit Behavior Configuration
+tarpit:
+  # UDP Tarpit Settings
+  udp:
+    # Enable UDP tarpit functionality
+    enabled: true
+    
+    # Always set TC (truncate) flag to force TCP retry
+    always_truncate: true
+    
+    # Delay before responding to UDP queries (seconds)
+    delay_range:
+      min: 0.1
+      max: 0.5
+    
+    # Maximum concurrent UDP connections to handle
+    max_connections: 1000
+  
+  # TCP Tarpit Settings
+  tcp:
+    # Enable TCP tarpit functionality
+    enabled: true
+    
+    # TCP socket buffer sizes (very small to slow down transfer)
+    window_size: 1        # SO_RCVBUF size in bytes
+    send_buffer: 64       # SO_SNDBUF size in bytes
+    
+    # Delay before starting to respond (seconds)
+    initial_delay_range:
+      min: 1.0
+      max: 5.0
+    
+    # Size of each chunk when sending response (bytes)
+    chunk_size: 8
+    
+    # Delay between sending chunks (seconds)
+    chunk_delay_range:
+      min: 0.5
+      max: 2.0
+    
+    # How long to wait for client to send their query (seconds)
+    # This prevents wasting resources on clients that connect but never send
+    # Set to 0 for no timeout
+    # Recommended: 30-60 seconds
+    connection_timeout: 60
+    
+    # Maximum concurrent TCP connections
+    max_connections: 100
+    
+    # Disable TCP_NODELAY to enable Nagle's algorithm
+    # This batches small packets, further slowing things down
+    nagle_algorithm: true
+
+# Logging Configuration
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+  
+  # Log file path (null for no file logging)
+  file: "/var/log/dns_tarpit.log"
+  
+  # Also log to console/stdout
+  console: true
+  
+  # Log format
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Log query details (can be verbose)
+  log_queries: true
+  
+  # Log client IPs
+  log_client_ips: true
+
+# Optional: Whitelist/Blacklist
+# filters:
+#   # Whitelist: IPs that should NOT be tarpitted
+#   whitelist:
+#     - "192.168.1.0/24"
+#     - "10.0.0.1"
+#   
+#   # Blacklist: Only tarpit these IPs (empty means tarpit all)
+#   blacklist: []
+
+# Optional: Statistics
+# statistics:
+#   enabled: true
+#   # Port for statistics HTTP server (0 to disable)
+#   http_port: 8080
+#   # Update interval in seconds
+#   update_interval: 60
