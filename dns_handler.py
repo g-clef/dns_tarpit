@@ -15,6 +15,7 @@ import dns.rrset
 import dns.rdtypes.IN.A
 import dns.rdtypes.ANY.SOA
 import dns.rdtypes.ANY.NS
+import dns.rdtypes.ANY.CNAME
 import dns.name
 
 logger = logging.getLogger(__name__)
@@ -98,12 +99,56 @@ class DNSHandler:
     def get_random_ip(self) -> str:
         """
         Get a random IP address from the configured pool
-        
+
         Returns:
             Random IP address as string
         """
         return random.choice(self.ip_pool)
-    
+
+    def is_cname_loop_query(self, qname: dns.name.Name) -> bool:
+        """
+        Check if this query is for the CNAME loop subdomain
+
+        Args:
+            qname: The query name
+
+        Returns:
+            True if query is for CNAME loop subdomain
+        """
+        cname_subdomain = self.config.cname_subdomain
+
+        if not cname_subdomain:
+            return False
+
+        # Build the full CNAME subdomain name
+        cname_zone = dns.name.from_text(f"{cname_subdomain}.{self.config.zone}")
+
+        # Check if query is for this subdomain or any name under it
+        return qname.is_subdomain(cname_zone) or qname == cname_zone
+
+    def generate_random_cname_target(self, qname: dns.name.Name) -> dns.name.Name:
+        """
+        Generate a random CNAME target within the CNAME loop subdomain
+
+        Args:
+            qname: The original query name
+
+        Returns:
+            A random name within the CNAME loop subdomain
+        """
+        cname_subdomain = self.config.cname_subdomain
+
+        # Generate a random label (8-16 characters)
+        import string
+        length = random.randint(8, 16)
+        random_label = ''.join(
+            random.choices(string.ascii_lowercase + string.digits, k=length)
+        )
+
+        # Build the target name: <random>.<cname_subdomain>.<zone>
+        target = f"{random_label}.{cname_subdomain}.{self.config.zone}"
+        return dns.name.from_text(target)
+
     def build_response(self, 
                       query: dns.message.Message,
                       truncate: bool = False) -> dns.message.Message:
@@ -129,7 +174,16 @@ class DNSHandler:
         question = query.question[0]
         qname = question.name
         qtype = question.rdtype
-        
+
+        # Check if this is a query for the CNAME loop subdomain
+        if self.is_cname_loop_query(qname):
+            # For A and AAAA queries, return CNAME instead
+            if qtype in (dns.rdatatype.A, dns.rdatatype.AAAA):
+                self._add_cname_record(response, qname)
+                logger.info(f"Responding to {qname} ({dns.rdatatype.to_text(qtype)}) with CNAME loop")
+                return response
+            # For other query types, fall through to normal handling
+
         if qtype == dns.rdatatype.A:
             self._add_a_record(response, qname)
         elif qtype == dns.rdatatype.NS:
@@ -168,9 +222,34 @@ class DNSHandler:
         )
         
         rrset.add(rdata, ttl=ttl)
-        
+
         logger.info(f"Responding to {qname} with A record: {ip_address}")
-    
+
+    def _add_cname_record(self, response: dns.message.Message, qname: dns.name.Name):
+        """Add CNAME record to response pointing to random name in same subdomain"""
+        ttl = self.config.get('dns.cname_loop.ttl', 300)
+
+        # Generate a random target within the CNAME loop subdomain
+        target = self.generate_random_cname_target(qname)
+
+        rrset = response.find_rrset(
+            response.answer,
+            qname,
+            dns.rdataclass.IN,
+            dns.rdatatype.CNAME,
+            create=True
+        )
+
+        rdata = dns.rdtypes.ANY.CNAME.CNAME(
+            dns.rdataclass.IN,
+            dns.rdatatype.CNAME,
+            target
+        )
+
+        rrset.add(rdata, ttl=ttl)
+
+        logger.debug(f"Added CNAME record for {qname} -> {target}")
+
     def _add_ns_record(self, response: dns.message.Message, qname: dns.name.Name):
         """Add NS record to response"""
         ttl = self.config.get('ip_responses.ttl', 300)

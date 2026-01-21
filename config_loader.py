@@ -49,6 +49,11 @@ class TarpitConfig:
         if self._ip_pool is None:
             self._ip_pool = self._generate_ip_pool()
         return self._ip_pool
+
+    @property
+    def cname_subdomain(self) -> str:
+        """Get the CNAME loop subdomain name"""
+        return self.get('dns.cname_loop.subdomain', '')
     
     def _generate_ip_pool(self) -> List[str]:
         """Generate IP pool from configuration"""
@@ -115,7 +120,10 @@ def validate_config(config: Dict[str, Any]) -> None:
     
     if 'tarpit' in config:
         validate_tarpit_config(config['tarpit'])
-    
+
+    if 'cname_loop' in config.get('dns', {}):
+        validate_cname_loop_config(config['dns']['cname_loop'])
+
     logger.info("Configuration validation passed")
 
 
@@ -187,6 +195,22 @@ def validate_tarpit_config(tarpit_config: Dict[str, Any]) -> None:
             raise ConfigurationError("TCP chunk_size must be at least 1")
 
 
+def validate_cname_loop_config(cname_config: Dict[str, Any]) -> None:
+    """Validate CNAME loop configuration"""
+    subdomain = cname_config.get('subdomain', '')
+
+    if subdomain:
+        # Basic validation that subdomain is a valid DNS label
+        if not subdomain.replace('-', '').replace('_', '').isalnum():
+            raise ConfigurationError(
+                f"Invalid CNAME loop subdomain: {subdomain}"
+            )
+
+    ttl = cname_config.get('ttl', 300)
+    if not isinstance(ttl, int) or ttl < 0:
+        raise ConfigurationError("CNAME loop TTL must be a non-negative integer")
+
+
 def get_default_config() -> Dict[str, Any]:
     return {
         'dns': {
@@ -201,6 +225,10 @@ def get_default_config() -> Dict[str, Any]:
                 'retry': 600,
                 'expire': 86400,
                 'minimum': 300
+            },
+            'cname_loop': {
+                'subdomain': 'loop',
+                'ttl': 300
             }
         },
         'ip_responses': {

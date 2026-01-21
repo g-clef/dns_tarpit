@@ -22,6 +22,17 @@ dns:
     expire: 86400
     minimum: 300
 
+  # CNAME Loop Configuration
+  # Queries to this subdomain will return infinite CNAME chains
+  # instead of A/AAAA records, causing resolvers to loop endlessly
+  cname_loop:
+    # Subdomain name (e.g., "loop" creates loop.tarpit.example.com)
+    # Set to empty string "" to disable CNAME loop feature
+    subdomain: "loop"
+
+    # TTL for CNAME records
+    ttl: 300
+
 # IP Address Pools for Responses
 # The tarpit will randomly select IPs from these ranges
 ip_responses:
